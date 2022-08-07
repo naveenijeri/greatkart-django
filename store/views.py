@@ -1,6 +1,12 @@
+from ast import keyword
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
+
+from carts.models import CartItem
 from .models import Product
 from category.models import Category
+from carts.views import _cart_id
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # Create your views here.
 def store(request, category_slug=None):
@@ -9,12 +15,21 @@ def store(request, category_slug=None):
     if category_slug is not None:
         categories = get_object_or_404(Category, slug=category_slug)
         products = Product.objects.filter(category=categories, is_available=True)
+        paginator = Paginator(products, 1)
+        page = request.GET.get('page')
+        paged_products = paginator.get_page(page)
         products_count = products.count()
     else:
-        products = Product.objects.filter(is_available=True)
+        products = Product.objects.filter(is_available=True).order_by('id')
         products_count = products.count()
+        paginator = Paginator(products,2)
+        page = request.GET.get('page', 2)
+        paged_products = paginator.get_page(page)
+
+
+
     context = {
-        'products': products,
+        'products': paged_products,
         'products_count': products_count
     }
     return render(request, 'store/store.html', context)
@@ -22,10 +37,26 @@ def store(request, category_slug=None):
 def product_detail(request, category_slug, product_slug):
     try:
         single_product = Product.objects.get(category__slug=category_slug, slug=product_slug )
+        in_cart = CartItem.objects.filter(cart__cart_id=_cart_id(request), product=single_product).exists()
     except Exception as e:
         raise e
     context = {
-        'single_product': single_product
+        'single_product': single_product,
+        'in_cart':in_cart,
     }
-    print("@@@@", context)
     return render(request, 'store/product_detail.html', context)
+
+def search(request):
+    keyword = None
+    products= None
+    print(request.GET)
+    if keyword in request.GET:
+        keyword = request.GET['keyword']
+        print(keyword)
+        if keyword:
+            products = Product.objets.order_by('-created_date').filter(descriptions__icontains=keyword)
+            print(products)
+    context = {
+        'products': products
+    }
+    return render(request, 'store/store.html', context)
